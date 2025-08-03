@@ -2,5 +2,9 @@
   {
     "sender": "BK",
     "text": "연동확인"
+  },
+  {
+    "sender": "BK",
+    "text": "연동"
   }
 ]
