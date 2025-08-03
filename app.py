@@ -1,5 +1,5 @@
 
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, render_template_string
 import json, os
 from datetime import datetime
 
@@ -9,23 +9,27 @@ app = Flask(__name__)
 COMMAND_FILE = "commands.json"
 LOG_FILE = "commands_log.json"
 STATUS_FILE = "status.json"
+STATUS_LOG_FILE = "status_log.json"
 UPDATE_FOLDER = "updates"
 
-# Initialize files
-for file_path, default in [(COMMAND_FILE, {"command": None, "type": None, "timestamp": None}),
-                           (LOG_FILE, []),
-                           (STATUS_FILE, {"status": None, "timestamp": None})]:
+# Initialize files if missing
+for file_path, default in [
+    (COMMAND_FILE, {"command": None, "type": None, "timestamp": None}),
+    (LOG_FILE, []),
+    (STATUS_FILE, {"status": None, "timestamp": None}),
+    (STATUS_LOG_FILE, [])
+]:
     if not os.path.exists(file_path):
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(default, f)
 
-# Admin page HTML
+# Admin page template with status log table
 ADMIN_HTML = '''
 <!DOCTYPE html>
 <html>
 <head><title>GPChrome Admin</title></head>
 <body style="font-family: Arial; margin:40px;">
-<h2>🛠 GPChrome 명령 전송</h2>
+<h2>🛠 GPChrome 명령 전송 & 모니터링</h2>
 <form method="POST" action="/admin">
     <label>명령 유형:</label>
     <select name="type">
@@ -49,78 +53,88 @@ ADMIN_HTML = '''
     {% endfor %}
 </table>
 <hr>
-<h3>Last Status</h3>
-<p>Status: <b>{{ last_status }}</b> | Time: {{ status_time }}</p>
+<h3>Status Log</h3>
+<table border="1" cellpadding="4" style="border-collapse: collapse;">
+    <tr><th>Time</th><th>Status</th></tr>
+    {% for entry in status_log %}
+    <tr><td>{{ entry.timestamp }}</td><td>{{ entry.status }}</td></tr>
+    {% endfor %}
+</table>
 </body>
 </html>
 '''
 
 @app.route('/admin', methods=['GET', 'POST'])
-def admin_page():
+def admin():
     if request.method == 'POST':
         cmd = request.form.get("command")
         cmd_type = request.form.get("type")
-        timestamp = datetime.now().isoformat()
-        # Update command file
+        ts = datetime.now().isoformat()
+        # save command
         with open(COMMAND_FILE, "w", encoding="utf-8") as f:
-            json.dump({"command": cmd, "type": cmd_type, "timestamp": timestamp}, f)
-        # Append to log
+            json.dump({"command": cmd, "type": cmd_type, "timestamp": ts}, f)
+        # log
         with open(LOG_FILE, "r+", encoding="utf-8") as f:
             log = json.load(f)
-            log.append({"command": cmd, "type": cmd_type, "timestamp": timestamp})
+            log.append({"command": cmd, "type": cmd_type, "timestamp": ts})
             f.seek(0)
             json.dump(log, f)
-    # Load data for display
+    # load for display
     with open(COMMAND_FILE, "r", encoding="utf-8") as f:
         current = json.load(f)
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         log = json.load(f)
     with open(STATUS_FILE, "r", encoding="utf-8") as f:
         status = json.load(f)
+    with open(STATUS_LOG_FILE, "r", encoding="utf-8") as f:
+        status_log = json.load(f)
     return render_template_string(ADMIN_HTML,
                                   current_command=current.get("command"),
                                   current_type=current.get("type"),
                                   cmd_time=current.get("timestamp"),
                                   log=log,
-                                  last_status=status.get("status"),
-                                  status_time=status.get("timestamp"))
+                                  status_log=status_log)
 
 @app.route('/command', methods=['GET'])
-def get_command():
+def get_cmd():
     with open(COMMAND_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return jsonify(data)
+        return jsonify(json.load(f))
 
 @app.route('/command', methods=['POST'])
-def set_command():
+def post_cmd():
     data = request.json
-    new_command = data.get("command")
-    new_type = data.get("type")
-    timestamp = datetime.now().isoformat()
+    cmd = data.get("command")
+    typ = data.get("type")
+    ts = datetime.now().isoformat()
     with open(COMMAND_FILE, "w", encoding="utf-8") as f:
-        json.dump({"command": new_command, "type": new_type, "timestamp": timestamp}, f)
-    # Log it
+        json.dump({"command": cmd, "type": typ, "timestamp": ts}, f)
+    # log
     with open(LOG_FILE, "r+", encoding="utf-8") as f:
         log = json.load(f)
-        log.append({"command": new_command, "type": new_type, "timestamp": timestamp})
+        log.append({"command": cmd, "type": typ, "timestamp": ts})
         f.seek(0)
         json.dump(log, f)
-    return jsonify({"status": "ok", "command": new_command, "type": new_type})
+    return jsonify({"status":"ok"})
 
 @app.route('/status', methods=['POST'])
-def update_status():
+def post_status():
     data = request.json
-    status = data.get("status")
-    timestamp = datetime.now().isoformat()
+    st = data.get("status")
+    ts = datetime.now().isoformat()
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"status": status, "timestamp": timestamp}, f)
-    return jsonify({"status": "updated"})
+        json.dump({"status": st, "timestamp": ts}, f)
+    # status log
+    with open(STATUS_LOG_FILE, "r+", encoding="utf-8") as f:
+        slog = json.load(f)
+        slog.append({"status": st, "timestamp": ts})
+        f.seek(0)
+        json.dump(slog, f)
+    return jsonify({"status":"updated"})
 
 @app.route('/status', methods=['GET'])
 def get_status():
     with open(STATUS_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return jsonify(data)
+        return jsonify(json.load(f))
 
 @app.route('/update/<filename>', methods=['GET'])
 def download_update(filename):
@@ -128,7 +142,7 @@ def download_update(filename):
 
 @app.route('/')
 def home():
-    return "✅ Render Flask Server with Admin UI and Logs Running", 200
+    return "GPChrome Render Server with Monitoring", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
