@@ -18,5 +18,9 @@
   {
     "sender": "BK",
     "text": "테스트"
+  },
+  {
+    "sender": "🤖 ChatGPT",
+    "text": "안녕하세요! 무엇을 도와드릴까요?"
   }
 ]
