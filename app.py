@@ -1,5 +1,5 @@
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 import json, os
 from datetime import datetime
 
@@ -70,16 +70,13 @@ def admin():
         cmd = request.form.get("command")
         cmd_type = request.form.get("type")
         ts = datetime.now().isoformat()
-        # save command
         with open(COMMAND_FILE, "w", encoding="utf-8") as f:
             json.dump({"command": cmd, "type": cmd_type, "timestamp": ts}, f)
-        # log
         with open(LOG_FILE, "r+", encoding="utf-8") as f:
             log = json.load(f)
             log.append({"command": cmd, "type": cmd_type, "timestamp": ts})
             f.seek(0)
             json.dump(log, f)
-    # load for display
     with open(COMMAND_FILE, "r", encoding="utf-8") as f:
         current = json.load(f)
     with open(LOG_FILE, "r", encoding="utf-8") as f:
@@ -106,9 +103,15 @@ def post_cmd():
     cmd = data.get("command")
     typ = data.get("type")
     ts = datetime.now().isoformat()
+
+    # ✅ update 명령 실행 중이면 덮어쓰기 방지
+    with open(COMMAND_FILE, "r", encoding="utf-8") as f:
+        current = json.load(f)
+    if current.get("command") and str(current.get("command")).startswith("update:") and cmd not in [None, ""]:
+        return jsonify({"status":"locked", "message":"update 명령 실행 중, 덮어쓰기 차단됨"})
+
     with open(COMMAND_FILE, "w", encoding="utf-8") as f:
         json.dump({"command": cmd, "type": typ, "timestamp": ts}, f)
-    # log
     with open(LOG_FILE, "r+", encoding="utf-8") as f:
         log = json.load(f)
         log.append({"command": cmd, "type": typ, "timestamp": ts})
@@ -123,7 +126,6 @@ def post_status():
     ts = datetime.now().isoformat()
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump({"status": st, "timestamp": ts}, f)
-    # status log
     with open(STATUS_LOG_FILE, "r+", encoding="utf-8") as f:
         slog = json.load(f)
         slog.append({"status": st, "timestamp": ts})
