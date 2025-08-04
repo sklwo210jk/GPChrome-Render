@@ -18,6 +18,10 @@ def check_auth():
     token = auth_header.split(' ')[1]
     return token == API_KEY
 
+@app.route('/')
+def index():
+    return "GPChrome Render 서버 정상"
+
 @app.route('/api/commands', methods=['POST'])
 def add_command():
     if not check_auth():
@@ -34,7 +38,7 @@ def get_command():
         return jsonify({"error": "Unauthorized"}), 401
     if commands:
         return jsonify(commands.pop(0))
-    return jsonify({})
+    return jsonify({"status": "no commands"})
 
 @app.route('/api/results', methods=['POST'])
 def add_result():
@@ -47,11 +51,12 @@ def add_result():
     return jsonify({"status": "result added", "result": data})
 
 @app.route('/api/results', methods=['GET'])
-def get_results():
+def get_result():
     if not check_auth():
         return jsonify({"error": "Unauthorized"}), 401
-    return jsonify(results)
+    if results:
+        return jsonify(results.pop(0))
+    return jsonify({"status": "no results"})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
