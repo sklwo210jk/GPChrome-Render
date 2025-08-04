@@ -1,10 +1,12 @@
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)  # ← 모든 도메인에서 API 호출 허용
 
 API_KEY = os.getenv("API_KEY", "")
 
